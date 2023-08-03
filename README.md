@@ -1,4 +1,4 @@
-# Matter PSoC&trade; 6 door dock example
+# Matter PSoC&trade; 6 door lock example
 
 This code example makes use of Matter on an Infineon PSoC&trade; 6 board to demonstrate its functionality as a Wi-Fi door lock device.
 
@@ -6,7 +6,7 @@ This code example makes use of Matter on an Infineon PSoC&trade; 6 board to demo
 
 ## Requirements
 
-- ModusToolbox&trade; software(https://www.infineon.com/modustoolbox) v3.0 or later (tested with v3.0)
+- [ModusToolbox&trade; software](https://www.infineon.com/modustoolbox) v3.0 or later (tested with v3.0)
 - PSoC&trade; 6 board with 2 user buttons, 2 MB of Flash, and two user LEDs
 - PSoC&trade; 6 board support package (BSP) minimum required version: 4.0.0
 - Programming language: C/C++
@@ -195,6 +195,7 @@ Document title: *CE236478* - *Wi-Fi door lock*
 | Version | Description of change |
 | ------- | --------------------- |
 | 1.0.0   | New code example for Wi-Fi door lock|
+| 1.0.1   | Removing "treat warnings as errors" build option|
 
 
 ------

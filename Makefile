@@ -118,7 +118,7 @@ endif
 # Select softfp or hardfp floating point. Default is softfp.
 VFP_SELECT=
 
-COMMON_WARNING_FLAGS = -Wall -Werror=all \
+COMMON_WARNING_FLAGS = -Wall \
         -Wno-error=unused-function \
         -Wno-error=unused-but-set-variable \
         -Wno-error=unused-variable \
