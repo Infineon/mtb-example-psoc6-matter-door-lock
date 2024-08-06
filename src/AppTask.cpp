@@ -21,11 +21,7 @@
 #include "AppEvent.h"
 #include "ButtonHandler.h"
 #include "LEDWidget.h"
-#include <app-common/zap-generated/af-structs.h>
-#include <app-common/zap-generated/attribute-id.h>
-#include <app-common/zap-generated/attribute-type.h>
 #include <app-common/zap-generated/attributes/Accessors.h>
-#include <app-common/zap-generated/cluster-id.h>
 #include <app-common/zap-generated/cluster-objects.h>
 
 #include <app/clusters/door-lock-server/door-lock-server.h>
@@ -68,6 +64,7 @@ using chip::DeviceLayer::OTAImageProcessorImpl;
 using chip::System::Layer;
 
 using namespace ::chip;
+using namespace ::chip::app;
 using namespace chip::TLV;
 using namespace ::chip::Credentials;
 using namespace ::chip::DeviceLayer;
@@ -81,8 +78,8 @@ using namespace ::chip::System;
 #define APP_EVENT_QUEUE_SIZE 10
 
 using chip::app::Clusters::DoorLock::DlLockState;
-using chip::app::Clusters::DoorLock::DlOperationError;
-using chip::app::Clusters::DoorLock::DlOperationSource;
+using chip::app::Clusters::DoorLock::OperationErrorEnum;
+using chip::app::Clusters::DoorLock::OperationSourceEnum;
 namespace {
 
 TimerHandle_t sFunctionTimer; // FreeRTOS app sw timer.
@@ -112,6 +109,7 @@ OTAImageProcessorImpl gImageProcessor;
 } // namespace
 
 using namespace ::chip;
+using namespace ::chip::app;
 using namespace chip::TLV;
 using namespace ::chip::Credentials;
 using namespace ::chip::DeviceLayer;
@@ -145,7 +143,7 @@ static Identify gIdentify1 = {
     chip::EndpointId{ 1 },
     OnIdentifyStart,
     OnIdentifyStop,
-    EMBER_ZCL_IDENTIFY_IDENTIFY_TYPE_NONE,
+    Clusters::Identify::IdentifyTypeEnum::kNone,
 };
 
 static void InitServer(intptr_t context)
@@ -241,7 +239,6 @@ void AppTask::lockMgr_Init()
         numberOfHolidaySchedules = 10;
     }
 
-    // err = LockMgr().Init(state, maxCredentialsPerUser, numberOfSupportedUsers);
     err = LockMgr().Init(state,
                          ParamBuilder()
                              .SetNumberOfUsers(numberOfUsers)
@@ -288,7 +285,8 @@ void AppTask::lockMgr_Init()
     }
 
     ConfigurationMgr().LogDeviceConfig();
-
+    // Users and credentials should be checked once from flash on boot
+    LockMgr().ReadConfigValues();
     // Print setup info
     PrintOnboardingCodes(chip::RendezvousInformationFlag(chip::RendezvousInformationFlag::kBLE));
 }
@@ -319,7 +317,6 @@ void AppTask::Init()
         0);
 
     chip::DeviceLayer::PlatformMgr().ScheduleWork(InitServer, reinterpret_cast<intptr_t>(nullptr));
-
 }
 
 void AppTask::AppTaskMain(void * pvParameter)
@@ -328,9 +325,6 @@ void AppTask::AppTaskMain(void * pvParameter)
 
     sAppTask.Init();
     P6_LOG("App Task started");
-
-    // Users and credentials should be checked once from flash on boot
-    LockMgr().ReadConfigValues();
 
     while (true)
     {
@@ -392,45 +386,43 @@ void AppTask::LockActionEventHandler(AppEvent * event)
 
     switch (event->Type)
     {
-        case AppEvent::kEventType_Lock:
+    case AppEvent::kEventType_Lock: {
+        action = static_cast<LockManager::Action_t>(event->LockEvent.Action);
+        actor  = event->LockEvent.Actor;
+        break;
+    }
+
+    case AppEvent::kEventType_Button: {
+
+        P6_LOG("%s [Action: %d]", __FUNCTION__, event->ButtonEvent.Action);
+
+        if (event->ButtonEvent.Action == APP_BUTTON_LONG_PRESS)
         {
-            action = static_cast<LockManager::Action_t>(event->LockEvent.Action);
-            actor  = event->LockEvent.Actor;
-            break;
+            P6_LOG("Sending a lock jammed event");
+
+            /* Generating Door Lock Jammed event */
+            DoorLockServer::Instance().SendLockAlarmEvent(1 /* Endpoint Id */, AlarmCodeEnum::kLockJammed);
+
+            return;
         }
-
-        case AppEvent::kEventType_Button:
+        else
         {
-
-            P6_LOG("%s [Action: %d]", __FUNCTION__, event->ButtonEvent.Action);
-
-            if (event->ButtonEvent.Action == APP_BUTTON_LONG_PRESS)
+            if (LockMgr().NextState() == true)
             {
-                P6_LOG("Sending a lock jammed event");
-
-                /* Generating Door Lock Jammed event */
-                DoorLockServer::Instance().SendLockAlarmEvent(1 /* Endpoint Id */, DlAlarmCode::kLockJammed);
-
-                return;
+                action = LockManager::LOCK_ACTION;
             }
             else
             {
-                if (LockMgr().NextState() == true)
-                {
-                    action = LockManager::LOCK_ACTION;
-                }
-                else
-                {
-                    action = LockManager::UNLOCK_ACTION;
-                }
-
-                actor = AppEvent::kEventType_Button;
+                action = LockManager::UNLOCK_ACTION;
             }
-            break;
-        }
 
-        default:
-            return;
+            actor = AppEvent::kEventType_Button;
+        }
+        break;
+    }
+
+    default:
+        return;
     }
 
     if (!LockMgr().InitiateAction(actor, action))
@@ -665,7 +657,7 @@ void AppTask::UpdateCluster(intptr_t context)
     bool unlocked        = LockMgr().NextState();
     DlLockState newState = unlocked ? DlLockState::kUnlocked : DlLockState::kLocked;
 
-    DlOperationSource source = DlOperationSource::kUnspecified;
+    OperationSourceEnum source = OperationSourceEnum::kUnspecified;
 
     // write the new lock value
     EmberAfStatus status =
